@@ -1,0 +1,174 @@
+/* Pedro Ribeiro Fernandes do Rosário 2510753 3WA */
+
+=============================================================
+  INF1018 - Software Básico (2026.1)
+  Trabalho G2 - Gerador Dinâmico de Funções
+  Relatório de Testes
+=============================================================
+
+--------------------------------------------------------------
+1. DESCRIÇÃO GERAL
+--------------------------------------------------------------
+
+O trabalho consiste na implementação da função cria_func, que
+recebe o endereço de uma função f, um array de descritores de
+parâmetros (DescParam), o número de parâmetros e um vetor de
+bytes (codigo[]). A função gera dinamicamente, no vetor codigo,
+o código de máquina x86-64 de uma nova função que chama f com
+os parâmetros descritos, podendo amarrá-los a valores fixos
+(FIX), a variáveis (IND) ou repassá-los diretamente (PARAM).
+
+--------------------------------------------------------------
+2. ESTRATÉGIA DE IMPLEMENTAÇÃO
+--------------------------------------------------------------
+
+A implementação foi feita de forma gradual, testando cada
+funcionalidade antes de avançar para a próxima;
+ - Passo 1: Implementação do PARAM
+ - Passo 2: Implementação do FIX
+ - Passo 3: Implementação do IND
+ - Passo 4: Implementação do PTR_PAR
+ 
+O código gerado segue a estrutura:
+
+  - Prólogo: push %rbp / mov %rsp,%rbp / and $-16,%rsp
+    (alinhamento de 16 bytes necessário para funções de biblioteca)
+
+  - Salvamento dos PARAM na pilha (push %rdi/%rsi/%rdx),
+    para evitar que instruções FIX/IND sobrescrevam os valores
+    recebidos pela nova função antes de repassá-los.
+
+  - Geração das instruções para cada parâmetro, em ordem inversa,
+    populando os registradores corretos (rdi, rsi, rdx):
+      * PARAM: pop do valor salvo na pilha para o registrador certo
+      * FIX INT_PAR: mov $constante, %edi/%esi/%edx (5 bytes)
+      * FIX PTR_PAR: movabs $endereço, %rdi/%rsi/%rdx (10 bytes)
+      * IND INT_PAR: movabs $end_var, %rax + mov (%rax), %edi/%esi/%edx
+      * IND PTR_PAR: movabs $end_var, %rax + mov (%rax), %rdi/%rsi/%rdx
+
+  - Chamada indireta: movabs $endereço_de_f, %rax + call *%rax
+    (necessário pois f pode estar em qualquer endereço de 64 bits,
+    como funções da libc, impossibilitando o call relativo de 32 bits)
+
+  - Epílogo: leave / ret
+
+--------------------------------------------------------------
+3. TESTES REALIZADOS
+--------------------------------------------------------------
+
+--------------------------------------------------------------
+3.1 Teste 1 - 1 parâmetro PARAM (função identidade)
+--------------------------------------------------------------
+
+Função original:
+  int identidade(int x) { return x; }
+
+Configuração:
+  params[0]: INT_PAR, PARAM
+
+Chamada:
+  f(42)
+
+Resultado obtido:
+  Resultado = 42
+
+Status: OK
+
+--------------------------------------------------------------
+3.2 Teste 2 - 2 parâmetros: PARAM e FIX INT_PAR (mult)
+--------------------------------------------------------------
+
+Função original:
+  int mult(int x, int y) { return x * y; }
+
+Configuração:
+  params[0]: INT_PAR, PARAM
+  params[1]: INT_PAR, FIX, valor = 10
+
+Chamada (loop de 1 a 10):
+  f_mult(i)
+
+Resultado obtido:
+  10
+  20
+  30
+  40
+  50
+  60
+  70
+  80
+  90
+  100
+
+Status: OK
+
+--------------------------------------------------------------
+3.3 Teste 3 - 2 parâmetros: IND e FIX INT_PAR (mult)
+--------------------------------------------------------------
+
+Função original:
+  int mult(int x, int y) { return x * y; }
+
+Configuração:
+  params[0]: INT_PAR, IND, valor.v_ptr = &i
+  params[1]: INT_PAR, FIX, valor = 10
+
+Chamada (loop de 1 a 10, sem argumentos):
+  f_mult()
+
+Resultado obtido:
+  10
+  20
+  30
+  40
+  50
+  60
+  70
+  80
+  90
+  100
+
+Status: OK
+
+--------------------------------------------------------------
+3.4 Teste 4 - 3 parâmetros: FIX PTR, PARAM PTR, PARAM INT (memcmp)
+--------------------------------------------------------------
+
+Função original:
+  int memcmp(const void *s1, const void *s2, size_t n)
+
+Configuração:
+  params[0]: PTR_PAR, FIX, valor.v_ptr = fixa
+  params[1]: PTR_PAR, PARAM
+  params[2]: INT_PAR, PARAM
+
+String fixa: "quero saber se a outra string é um prefixo dessa"
+String s:    "quero saber tudo"
+
+Chamada 1: mesmo_prefixo(s, 12)
+Resultado obtido: SIM  (correto: os 12 primeiros bytes são iguais)
+
+Chamada 2: mesmo_prefixo(s, 16)
+Resultado obtido: NAO  (correto: os 16 bytes diferem)
+
+Status: OK
+
+--------------------------------------------------------------
+4. O QUE ESTÁ FUNCIONANDO
+--------------------------------------------------------------
+
+- Geração de código para 1, 2 e 3 parâmetros
+- Todos os tipos de origem: PARAM, FIX e IND
+- Ambos os tipos de valor: INT_PAR e PTR_PAR
+- Chamada a funções definidas no próprio programa
+- Chamada a funções da biblioteca padrão (memcmp)
+- Alinhamento de pilha para funções de biblioteca
+- Salvamento e restauração corretos dos registradores PARAM
+
+--------------------------------------------------------------
+5. O QUE NÃO ESTÁ FUNCIONANDO
+--------------------------------------------------------------
+
+Tudo está funcionando
+
+=============================================================
